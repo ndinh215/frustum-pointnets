@@ -1,5 +1,5 @@
 import numpy
-from mayavi.mlab import *
+from mayavi import mlab
 
 def test_plot3d():
     """Generates a pretty set of lines."""
@@ -12,7 +12,8 @@ def test_plot3d():
     y = numpy.sin(mu) * (1 + numpy.cos(n_long * mu / n_mer) * 0.5)
     z = numpy.sin(n_long * mu / n_mer) * 0.5
 
-    l = plot3d(x, y, z, numpy.sin(mu), tube_radius=0.025, colormap='Spectral')
+    l = mlab.plot3d(x, y, z, numpy.sin(mu), tube_radius=0.025, colormap='Spectral')
+    mlab.show()
     return l
 
 test_plot3d()

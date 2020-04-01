@@ -62,7 +62,7 @@ def tf_gather_object_pc(point_cloud, mask, npoints=512):
         return indices
 
     indices = tf.py_func(mask_to_indices, [mask], tf.int32)  
-    object_pc = tf.gather_nd(point_cloud, indices)
+    object_pc = tf.gather_nd(point_cloud, indices) #(32, 512, 3)
     return object_pc, indices
 
 
@@ -103,10 +103,10 @@ def get_box3d_corners(center, heading_residuals, size_residuals):
         box3d_corners: (B,NH,NS,8,3) tensor
     """
     batch_size = center.get_shape()[0].value
-    heading_bin_centers = tf.constant(np.arange(0,2*np.pi,2*np.pi/NUM_HEADING_BIN), dtype=tf.float32) # (NH,)
+    heading_bin_centers = tf.constant(np.arange(0,2*np.pi,2*np.pi/NUM_HEADING_BIN), dtype=tf.float32) # (NH,) #(12)
     headings = heading_residuals + tf.expand_dims(heading_bin_centers, 0) # (B,NH)
     
-    mean_sizes = tf.expand_dims(tf.constant(g_mean_size_arr, dtype=tf.float32), 0) + size_residuals # (B,NS,1)
+    mean_sizes = tf.expand_dims(tf.constant(g_mean_size_arr, dtype=tf.float32), 0) + size_residuals # (B,NS,1) #(32, 8, 3)
     sizes = mean_sizes + size_residuals # (B,NS,3)
     sizes = tf.tile(tf.expand_dims(sizes,1), [1,NUM_HEADING_BIN,1,1]) # (B,NH,NS,3)
     headings = tf.tile(tf.expand_dims(headings,-1), [1,1,NUM_SIZE_CLUSTER]) # (B,NH,NS)
@@ -122,7 +122,7 @@ def huber_loss(error, delta):
     abs_error = tf.abs(error)
     quadratic = tf.minimum(abs_error, delta)
     linear = (abs_error - quadratic)
-    losses = 0.5 * quadratic**2 + delta * linear
+    losses = 0.5 * quadratic**2 + delta * linear #(32,)
     return tf.reduce_mean(losses)
 
 
@@ -134,13 +134,13 @@ def parse_output_to_tensors(output, end_points):
     Output:
         end_points: dict (updated)
     '''
-    batch_size = output.get_shape()[0].value
-    center = tf.slice(output, [0,0], [-1,3])
+    batch_size = output.get_shape()[0].value #32
+    center = tf.slice(output, [0,0], [-1,3]) #(32, 3)
     end_points['center_boxnet'] = center
 
-    heading_scores = tf.slice(output, [0,3], [-1,NUM_HEADING_BIN])
+    heading_scores = tf.slice(output, [0,3], [-1,NUM_HEADING_BIN]) #(32, 12)
     heading_residuals_normalized = tf.slice(output, [0,3+NUM_HEADING_BIN],
-        [-1,NUM_HEADING_BIN])
+        [-1,NUM_HEADING_BIN]) #(32, 12)
     end_points['heading_scores'] = heading_scores # BxNUM_HEADING_BIN
     end_points['heading_residuals_normalized'] = \
         heading_residuals_normalized # BxNUM_HEADING_BIN (-1 to 1)
@@ -148,15 +148,15 @@ def parse_output_to_tensors(output, end_points):
         heading_residuals_normalized * (np.pi/NUM_HEADING_BIN) # BxNUM_HEADING_BIN
     
     size_scores = tf.slice(output, [0,3+NUM_HEADING_BIN*2],
-        [-1,NUM_SIZE_CLUSTER]) # BxNUM_SIZE_CLUSTER
+        [-1,NUM_SIZE_CLUSTER]) # BxNUM_SIZE_CLUSTER #(32, 8)
     size_residuals_normalized = tf.slice(output,
-        [0,3+NUM_HEADING_BIN*2+NUM_SIZE_CLUSTER], [-1,NUM_SIZE_CLUSTER*3])
+        [0,3+NUM_HEADING_BIN*2+NUM_SIZE_CLUSTER], [-1,NUM_SIZE_CLUSTER*3]) #(32, 24)
     size_residuals_normalized = tf.reshape(size_residuals_normalized,
-        [batch_size, NUM_SIZE_CLUSTER, 3]) # BxNUM_SIZE_CLUSTERx3
+        [batch_size, NUM_SIZE_CLUSTER, 3]) # BxNUM_SIZE_CLUSTERx3 #(32, 8, 3)
     end_points['size_scores'] = size_scores
     end_points['size_residuals_normalized'] = size_residuals_normalized
     end_points['size_residuals'] = size_residuals_normalized * \
-        tf.expand_dims(tf.constant(g_mean_size_arr, dtype=tf.float32), 0)
+        tf.expand_dims(tf.constant(g_mean_size_arr, dtype=tf.float32), 0) #(32, 8, 3)
 
     return end_points
 
@@ -204,35 +204,35 @@ def point_cloud_masking(point_cloud, logits, end_points, xyz_only=True):
             M = NUM_OBJECT_POINT as a hyper-parameter
         mask_xyz_mean: TF tensor in shape (B,3)
     '''
-    batch_size = point_cloud.get_shape()[0].value
-    num_point = point_cloud.get_shape()[1].value
+    batch_size = point_cloud.get_shape()[0].value #32 #point_cloud(32, 2048, 4)
+    num_point = point_cloud.get_shape()[1].value #2048
     mask = tf.slice(logits,[0,0,0],[-1,-1,1]) < \
-        tf.slice(logits,[0,0,1],[-1,-1,1])
+        tf.slice(logits,[0,0,1],[-1,-1,1]) #(32, 2048, 1)
     mask = tf.to_float(mask) # BxNx1
     mask_count = tf.tile(tf.reduce_sum(mask,axis=1,keep_dims=True),
-        [1,1,3]) # Bx1x3
-    point_cloud_xyz = tf.slice(point_cloud, [0,0,0], [-1,-1,3]) # BxNx3
+        [1,1,3]) # Bx1x3 #(32, 1, 3)
+    point_cloud_xyz = tf.slice(point_cloud, [0,0,0], [-1,-1,3]) # BxNx3 #(32, 2048, 3)
     mask_xyz_mean = tf.reduce_sum(tf.tile(mask, [1,1,3])*point_cloud_xyz,
-        axis=1, keep_dims=True) # Bx1x3
-    mask = tf.squeeze(mask, axis=[2]) # BxN
+        axis=1, keep_dims=True) # Bx1x3 #(32, 1, 3)
+    mask = tf.squeeze(mask, axis=[2]) # BxN  #(32, 2048)
     end_points['mask'] = mask
-    mask_xyz_mean = mask_xyz_mean/tf.maximum(mask_count,1) # Bx1x3
+    mask_xyz_mean = mask_xyz_mean/tf.maximum(mask_count,1) # Bx1x3 #(32, 1, 3)
 
     # Translate to masked points' centroid
     point_cloud_xyz_stage1 = point_cloud_xyz - \
-        tf.tile(mask_xyz_mean, [1,num_point,1])
+        tf.tile(mask_xyz_mean, [1,num_point,1]) #(32, 2048, 3)
 
     if xyz_only:
-        point_cloud_stage1 = point_cloud_xyz_stage1
+        point_cloud_stage1 = point_cloud_xyz_stage1 #(32, 2048, 3)
     else:
         point_cloud_features = tf.slice(point_cloud, [0,0,3], [-1,-1,-1])
         point_cloud_stage1 = tf.concat(\
             [point_cloud_xyz_stage1, point_cloud_features], axis=-1)
-    num_channels = point_cloud_stage1.get_shape()[2].value
+    num_channels = point_cloud_stage1.get_shape()[2].value #3
 
     object_point_cloud, _ = tf_gather_object_pc(point_cloud_stage1,
         mask, NUM_OBJECT_POINT)
-    object_point_cloud.set_shape([batch_size, NUM_OBJECT_POINT, num_channels])
+    object_point_cloud.set_shape([batch_size, NUM_OBJECT_POINT, num_channels]) #(32, 512, 3)
 
     return object_point_cloud, tf.squeeze(mask_xyz_mean, axis=1), end_points
 
@@ -248,30 +248,30 @@ def get_center_regression_net(object_point_cloud, one_hot_vec,
     Output:
         predicted_center: TF tensor in shape (B,3)
     ''' 
-    num_point = object_point_cloud.get_shape()[1].value
-    net = tf.expand_dims(object_point_cloud, 2)
+    num_point = object_point_cloud.get_shape()[1].value #512
+    net = tf.expand_dims(object_point_cloud, 2) #(32, 512, 1, 3)
     net = tf_util.conv2d(net, 128, [1,1],
                          padding='VALID', stride=[1,1],
                          bn=True, is_training=is_training,
-                         scope='conv-reg1-stage1', bn_decay=bn_decay)
+                         scope='conv-reg1-stage1', bn_decay=bn_decay) #(32, 512, 1, 128)
     net = tf_util.conv2d(net, 128, [1,1],
                          padding='VALID', stride=[1,1],
                          bn=True, is_training=is_training,
-                         scope='conv-reg2-stage1', bn_decay=bn_decay)
+                         scope='conv-reg2-stage1', bn_decay=bn_decay) #(32, 512, 1, 128)
     net = tf_util.conv2d(net, 256, [1,1],
                          padding='VALID', stride=[1,1],
                          bn=True, is_training=is_training,
-                         scope='conv-reg3-stage1', bn_decay=bn_decay)
+                         scope='conv-reg3-stage1', bn_decay=bn_decay) #(32, 512, 1, 256)
     net = tf_util.max_pool2d(net, [num_point,1],
-        padding='VALID', scope='maxpool-stage1')
-    net = tf.squeeze(net, axis=[1,2])
-    net = tf.concat([net, one_hot_vec], axis=1)
+        padding='VALID', scope='maxpool-stage1') #(32, 1, 1, 256)
+    net = tf.squeeze(net, axis=[1,2]) #(32, 256)
+    net = tf.concat([net, one_hot_vec], axis=1) #one_hot_vec: (32, 3), net: (32, 259)
     net = tf_util.fully_connected(net, 256, scope='fc1-stage1', bn=True,
-        is_training=is_training, bn_decay=bn_decay)
+        is_training=is_training, bn_decay=bn_decay) #(32, 256)
     net = tf_util.fully_connected(net, 128, scope='fc2-stage1', bn=True,
-        is_training=is_training, bn_decay=bn_decay)
+        is_training=is_training, bn_decay=bn_decay) #(32, 128)
     predicted_center = tf_util.fully_connected(net, 3, activation_fn=None,
-        scope='fc3-stage1')
+        scope='fc3-stage1') #(32, 3)
     return predicted_center, end_points
 
 
@@ -298,11 +298,11 @@ def get_loss(mask_label, center_label, \
     '''
     # 3D Segmentation loss
     mask_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(\
-        logits=end_points['mask_logits'], labels=mask_label))
+        logits=end_points['mask_logits'], labels=mask_label)) #mask_label: (32, 2048), end_points['mask_logits']: (32, 2048, 2)
     tf.summary.scalar('3d mask loss', mask_loss)
 
     # Center regression losses
-    center_dist = tf.norm(center_label - end_points['center'], axis=-1)
+    center_dist = tf.norm(center_label - end_points['center'], axis=-1) #center_label: (32, 3) #(32, 1)
     center_loss = huber_loss(center_dist, delta=2.0)
     tf.summary.scalar('center loss', center_loss)
     stage1_center_dist = tf.norm(center_label - \

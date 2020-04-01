@@ -344,19 +344,19 @@ def fully_connected(inputs,
     Variable tensor of size B x num_outputs.
   """
   with tf.variable_scope(scope) as sc:
-    num_input_units = inputs.get_shape()[-1].value
+    num_input_units = inputs.get_shape()[-1].value #259
     weights = _variable_with_weight_decay('weights',
                                           shape=[num_input_units, num_outputs],
                                           use_xavier=use_xavier,
                                           stddev=stddev,
-                                          wd=weight_decay)
-    outputs = tf.matmul(inputs, weights)
+                                          wd=weight_decay) #(259, 256)
+    outputs = tf.matmul(inputs, weights) #(32, 256)
     biases = _variable_on_cpu('biases', [num_outputs],
-                             tf.constant_initializer(0.0))
-    outputs = tf.nn.bias_add(outputs, biases)
+                             tf.constant_initializer(0.0)) #256
+    outputs = tf.nn.bias_add(outputs, biases) #(32, 256)
      
     if bn:
-      outputs = batch_norm_for_fc(outputs, is_training, bn_decay, 'bn')
+      outputs = batch_norm_for_fc(outputs, is_training, bn_decay, 'bn') #(32, 256)
 
     if activation_fn is not None:
       outputs = activation_fn(outputs)
