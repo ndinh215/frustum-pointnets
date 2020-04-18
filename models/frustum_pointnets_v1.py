@@ -167,8 +167,8 @@ def get_model(point_cloud, one_hot_vec, is_training, bn_decay=None):
     # T-Net and coordinate translation
     center_delta, end_points = get_center_regression_net(\
         object_point_cloud_xyz, one_hot_vec,
-        is_training, bn_decay, end_points) #center_delta: (32, 3)
-    stage1_center = center_delta + mask_xyz_mean # Bx3 #(32, 3)
+        is_training, bn_decay, end_points) #center_delta: (32, 3) objects center coordinates with original coordinate mask_xyz_mean
+    stage1_center = center_delta + mask_xyz_mean # Bx3 #(32, 3) object center by original coordinate
     end_points['stage1_center'] = stage1_center
     # Get object point cloud in object coordinate
     object_point_cloud_xyz_new = \
@@ -181,7 +181,7 @@ def get_model(point_cloud, one_hot_vec, is_training, bn_decay=None):
 
     # Parse output to 3D box parameters
     end_points = parse_output_to_tensors(output, end_points) #(32, 3)
-    end_points['center'] = end_points['center_boxnet'] + stage1_center # Bx3 #(32, 3)
+    end_points['center'] = end_points['center_boxnet'] + stage1_center # Bx3 #(32, 3) object box center by original coordinates
 
     return end_points
 

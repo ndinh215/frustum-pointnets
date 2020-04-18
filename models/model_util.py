@@ -69,29 +69,29 @@ def tf_gather_object_pc(point_cloud, mask, npoints=512):
 def get_box3d_corners_helper(centers, headings, sizes):
     """ TF layer. Input: (N,3), (N,), (N,3), Output: (N,8,3) """
     #print '-----', centers
-    N = centers.get_shape()[0].value
-    l = tf.slice(sizes, [0,0], [-1,1]) # (N,1)
-    w = tf.slice(sizes, [0,1], [-1,1]) # (N,1)
-    h = tf.slice(sizes, [0,2], [-1,1]) # (N,1)
+    N = centers.get_shape()[0].value #3072
+    l = tf.slice(sizes, [0,0], [-1,1]) # (N,1) #(3072,1)
+    w = tf.slice(sizes, [0,1], [-1,1]) # (N,1) #(3072,1)
+    h = tf.slice(sizes, [0,2], [-1,1]) # (N,1) #(3072,1)
     #print l,w,h
     x_corners = tf.concat([l/2,l/2,-l/2,-l/2,l/2,l/2,-l/2,-l/2], axis=1) # (N,8)
     y_corners = tf.concat([h/2,h/2,h/2,h/2,-h/2,-h/2,-h/2,-h/2], axis=1) # (N,8)
     z_corners = tf.concat([w/2,-w/2,-w/2,w/2,w/2,-w/2,-w/2,w/2], axis=1) # (N,8)
     corners = tf.concat([tf.expand_dims(x_corners,1), tf.expand_dims(y_corners,1), tf.expand_dims(z_corners,1)], axis=1) # (N,3,8)
     #print x_corners, y_corners, z_corners
-    c = tf.cos(headings)
-    s = tf.sin(headings)
-    ones = tf.ones([N], dtype=tf.float32)
-    zeros = tf.zeros([N], dtype=tf.float32)
-    row1 = tf.stack([c,zeros,s], axis=1) # (N,3)
-    row2 = tf.stack([zeros,ones,zeros], axis=1)
-    row3 = tf.stack([-s,zeros,c], axis=1)
+    c = tf.cos(headings) #(3072, )
+    s = tf.sin(headings) #(3072, )
+    ones = tf.ones([N], dtype=tf.float32) #(3072, )
+    zeros = tf.zeros([N], dtype=tf.float32) #(3072, )
+    row1 = tf.stack([c,zeros,s], axis=1) # (N,3) #(3072, 3)
+    row2 = tf.stack([zeros,ones,zeros], axis=1) #(3072, 3)
+    row3 = tf.stack([-s,zeros,c], axis=1) #(3072, 3)
     R = tf.concat([tf.expand_dims(row1,1), tf.expand_dims(row2,1), tf.expand_dims(row3,1)], axis=1) # (N,3,3)
     #print row1, row2, row3, R, N
     corners_3d = tf.matmul(R, corners) # (N,3,8)
     corners_3d += tf.tile(tf.expand_dims(centers,2), [1,1,8]) # (N,3,8)
     corners_3d = tf.transpose(corners_3d, perm=[0,2,1]) # (N,8,3)
-    return corners_3d
+    return corners_3d #corners by original coordinates
 
 def get_box3d_corners(center, heading_residuals, size_residuals):
     """ TF layer.
@@ -102,17 +102,17 @@ def get_box3d_corners(center, heading_residuals, size_residuals):
     Outputs:
         box3d_corners: (B,NH,NS,8,3) tensor
     """
-    batch_size = center.get_shape()[0].value
+    batch_size = center.get_shape()[0].value #32
     heading_bin_centers = tf.constant(np.arange(0,2*np.pi,2*np.pi/NUM_HEADING_BIN), dtype=tf.float32) # (NH,) #(12)
-    headings = heading_residuals + tf.expand_dims(heading_bin_centers, 0) # (B,NH)
+    headings = heading_residuals + tf.expand_dims(heading_bin_centers, 0) # (B,NH) #(32, 12)
     
     mean_sizes = tf.expand_dims(tf.constant(g_mean_size_arr, dtype=tf.float32), 0) + size_residuals # (B,NS,1) #(32, 8, 3)
     sizes = mean_sizes + size_residuals # (B,NS,3)
-    sizes = tf.tile(tf.expand_dims(sizes,1), [1,NUM_HEADING_BIN,1,1]) # (B,NH,NS,3)
-    headings = tf.tile(tf.expand_dims(headings,-1), [1,1,NUM_SIZE_CLUSTER]) # (B,NH,NS)
-    centers = tf.tile(tf.expand_dims(tf.expand_dims(center,1),1), [1,NUM_HEADING_BIN, NUM_SIZE_CLUSTER,1]) # (B,NH,NS,3)
+    sizes = tf.tile(tf.expand_dims(sizes,1), [1,NUM_HEADING_BIN,1,1]) # (B,NH,NS,3) #(32, 12, 8, 3)
+    headings = tf.tile(tf.expand_dims(headings,-1), [1,1,NUM_SIZE_CLUSTER]) # (B,NH,NS) #(32, 12, 8)
+    centers = tf.tile(tf.expand_dims(tf.expand_dims(center,1),1), [1,NUM_HEADING_BIN, NUM_SIZE_CLUSTER,1]) # (B,NH,NS,3) #(32, 12, 8, 3)
 
-    N = batch_size*NUM_HEADING_BIN*NUM_SIZE_CLUSTER
+    N = batch_size*NUM_HEADING_BIN*NUM_SIZE_CLUSTER #3072
     corners_3d = get_box3d_corners_helper(tf.reshape(centers, [N,3]), tf.reshape(headings, [N]), tf.reshape(sizes, [N,3]))
 
     return tf.reshape(corners_3d, [batch_size, NUM_HEADING_BIN, NUM_SIZE_CLUSTER, 8, 3])
@@ -331,7 +331,7 @@ def get_loss(mask_label, center_label, \
     size_class_loss = tf.reduce_mean( \
         tf.nn.sparse_softmax_cross_entropy_with_logits( \
         logits=end_points['size_scores'], labels=size_class_label))
-    tf.summary.scalar('size class loss', size_class_loss)
+    tf.summary.scalar('size class loss', size_class_loss) #end_points['size_scores']: (32, 8) #(32, 1)
 
     scls_onehot = tf.one_hot(size_class_label,
         depth=NUM_SIZE_CLUSTER,
@@ -369,7 +369,7 @@ def get_loss(mask_label, center_label, \
         np.arange(0,2*np.pi,2*np.pi/NUM_HEADING_BIN), dtype=tf.float32) # (NH,)
     heading_label = tf.expand_dims(heading_residual_label,1) + \
         tf.expand_dims(heading_bin_centers, 0) # (B,NH)
-    heading_label = tf.reduce_sum(tf.to_float(hcls_onehot)*heading_label, 1)
+    heading_label = tf.reduce_sum(tf.to_float(hcls_onehot)*heading_label, 1) #(B,)
     mean_sizes = tf.expand_dims( \
         tf.constant(g_mean_size_arr, dtype=tf.float32), 0) # (1,NS,3)
     size_label = mean_sizes + \
