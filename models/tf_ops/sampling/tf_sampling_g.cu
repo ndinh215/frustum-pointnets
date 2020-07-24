@@ -102,6 +102,11 @@ __global__ void binarysearchKernel(int b,int n,int m,const float * __restrict__ 
     }
   }
 }
+
+/*
+ * Get m farthest points in b block/batch with n items processed by block/batch threads
+ * @return idxs indices of farthest points in point cloud
+ */
 __global__ void farthestpointsamplingKernel(int b,int n,int m,const float * __restrict__ dataset,float * __restrict__ temp,int * __restrict__ idxs){
   if (m<=0)
     return;

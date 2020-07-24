@@ -46,7 +46,7 @@ def sample_and_group(npoint, radius, nsample, xyz, points, knn=False, use_xyz=Tr
     if points is not None:
         grouped_points = group_point(points, idx) # (batch_size, npoint, nsample, channel)
         if use_xyz:
-            new_points = tf.concat([grouped_xyz, grouped_points], axis=-1) # (batch_size, npoint, nample, 3+channel)
+            new_points = tf.concat([grouped_xyz, grouped_points], axis=-1) # (batch_size, npoint, nsample, 3+channel)
         else:
             new_points = grouped_points
     else:
@@ -70,7 +70,7 @@ def sample_and_group_all(xyz, points, use_xyz=True):
     batch_size = xyz.get_shape()[0].value
     nsample = xyz.get_shape()[1].value
     new_xyz = tf.constant(np.tile(np.array([0,0,0]).reshape((1,1,3)), (batch_size,1,1)),dtype=tf.float32) # (batch_size, 1, 3)
-    idx = tf.constant(np.tile(np.array(range(nsample)).reshape((1,1,nsample)), (batch_size,1,1)))
+    idx = tf.constant(np.tile(np.array(range(nsample)).reshape((1,1,nsample)), (batch_size,1,1))) # (batch_size, 1, nsample)
     grouped_xyz = tf.reshape(xyz, (batch_size, 1, nsample, 3)) # (batch_size, npoint=1, nsample, 3)
     if points is not None:
         if use_xyz:
@@ -107,7 +107,7 @@ def pointnet_sa_module(xyz, points, npoint, radius, nsample, mlp, mlp2, group_al
         # Sample and Grouping
         if group_all:
             nsample = xyz.get_shape()[1].value
-            new_xyz, new_points, idx, grouped_xyz = sample_and_group_all(xyz, points, use_xyz)
+            new_xyz, new_points, idx, grouped_xyz = sample_and_group_all(xyz, points, use_xyz) # new_points: (batch_size, 1, ndataset, 3+channel)
         else:
             new_xyz, new_points, idx, grouped_xyz = sample_and_group(npoint, radius, nsample, xyz, points, knn, use_xyz)
 
@@ -123,7 +123,7 @@ def pointnet_sa_module(xyz, points, npoint, radius, nsample, mlp, mlp2, group_al
 
         # Pooling in Local Regions
         if pooling=='max':
-            new_points = tf.reduce_max(new_points, axis=[2], keep_dims=True, name='maxpool')
+            new_points = tf.reduce_max(new_points, axis=[2], keep_dims=True, name='maxpool') # new_points: (batch_size, 1, mlp[-1])
         elif pooling=='avg':
             new_points = tf.reduce_mean(new_points, axis=[2], keep_dims=True, name='avgpool')
         elif pooling=='weighted_avg':
@@ -149,7 +149,7 @@ def pointnet_sa_module(xyz, points, npoint, radius, nsample, mlp, mlp2, group_al
                                             data_format=data_format) 
             if use_nchw: new_points = tf.transpose(new_points, [0,2,3,1])
 
-        new_points = tf.squeeze(new_points, [2]) # (batch_size, npoints, mlp2[-1])
+        new_points = tf.squeeze(new_points, [2]) # (batch_size, npoint=1, mlp2[-1])
         return new_xyz, new_points, idx
 
 def pointnet_sa_module_msg(xyz, points, npoint, radius_list, nsample_list, mlp_list, is_training, bn_decay, scope, bn=True, use_xyz=True, use_nchw=False):
@@ -175,7 +175,7 @@ def pointnet_sa_module_msg(xyz, points, npoint, radius_list, nsample_list, mlp_l
             radius = radius_list[i]
             nsample = nsample_list[i]
             idx, pts_cnt = query_ball_point(radius, nsample, xyz, new_xyz)
-            grouped_xyz = group_point(xyz, idx)
+            grouped_xyz = group_point(xyz, idx) #(b, npoint, nsample, c)
             grouped_xyz -= tf.tile(tf.expand_dims(new_xyz, 2), [1,1,nsample,1])
             if points is not None:
                 grouped_points = group_point(points, idx)
@@ -209,9 +209,9 @@ def pointnet_fp_module(xyz1, xyz2, points1, points2, mlp, is_training, bn_decay,
     with tf.variable_scope(scope) as sc:
         dist, idx = three_nn(xyz1, xyz2)
         dist = tf.maximum(dist, 1e-10)
-        norm = tf.reduce_sum((1.0/dist),axis=2,keep_dims=True)
+        norm = tf.reduce_sum((1.0/dist),axis=2,keep_dims=True) # norm = 1/d1 + 1/d2 + 1/d3
         norm = tf.tile(norm,[1,1,3])
-        weight = (1.0/dist) / norm
+        weight = (1.0/dist) / norm # weight_i = 1/d_i / (1/d1 + 1/d2 + 1/d3)
         interpolated_points = three_interpolate(points2, idx, weight)
 
         if points1 is not None:

@@ -49,10 +49,10 @@ def get_instance_seg_v2_net(point_cloud, one_hot_vec,
     l3_xyz, l3_points, _ = pointnet_sa_module(l2_xyz, l2_points,
         npoint=None, radius=None, nsample=None, mlp=[128,256,1024],
         mlp2=None, group_all=True, is_training=is_training,
-        bn_decay=bn_decay, scope='layer3')
+        bn_decay=bn_decay, scope='layer3') # l3_points: (batch_size, 1, mlp[-1])
 
     # Feature Propagation layers
-    l3_points = tf.concat([l3_points, tf.expand_dims(one_hot_vec, 1)], axis=2)
+    l3_points = tf.concat([l3_points, tf.expand_dims(one_hot_vec, 1)], axis=2) # l3_points: (batch_size, 1, mlp[-1] + k)
     l2_points = pointnet_fp_module(l2_xyz, l3_xyz, l2_points, l3_points,
         [128,128], is_training, bn_decay, scope='fa_layer1')
     l1_points = pointnet_fp_module(l1_xyz, l2_xyz, l1_points, l2_points,
